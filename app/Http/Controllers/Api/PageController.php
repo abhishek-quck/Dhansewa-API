@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\Auth;
 use App\Models\{Account, AccountHead,
     Branch,
     Center,
+    ClientCGT,
     ClientDocument,
     ClientGRT,
     ClientLoan,
@@ -210,20 +211,36 @@ class PageController extends Controller
     public function searchEnrolled(Request $request)
     {
         $term = $request->term;
-        if( $b = $request->branch )
-        {
-            $enroll = Enrollment::where('branch_id',$b );
-        } else {
-            $enroll = new Enrollment;
-        }
+        $branch = $request->branch;
+        $enroll = new Enrollment;
         $enroll = $enroll->where('company_id', Auth::user()->cID );
-        $data= $enroll->where(function($q) use ($term)
-        {
-            $q->orWhere('applicant_name','like',"%$term%")
-            ->orWhere('phone','like',"%$term%");
-        })
-        ->get();
-        return response()->json($data, 200);
+
+        if( $request->process ) {
+            if( $branch ) {
+                $enroll = $enroll->where('branch_id', $branch );
+            }
+            $enroll = $enroll->where(function($query){
+                $query->doesntHave('cgt')->orWhereHas( 'cgt', function($q){
+                    $q->where('revised', false);
+                });
+            });
+            // $enroll = $enroll->doesntHave('cgt')->orWhereHas( 'cgt', function($q){
+            //     $q->where('revised', false);
+            // });
+        } else {
+            if( $branch ) {
+                $enroll = $enroll->where('branch_id', $branch );
+            }
+        }
+        if($term) {
+            $enroll = $enroll->where(function($q) use ($term)
+            {
+                $q->orWhere('applicant_name','like',"%$term%")
+                ->orWhere('phone','like',"%$term%");
+            });
+        }
+
+        return response()->json( $enroll->get(), 200 );
     }
 
     public function previewDocument($client, $id)
@@ -311,11 +328,6 @@ class PageController extends Controller
             $this->badResponse['message']=$e->getMessage();
             return response()->json($this->badResponse, 500 );
         }
-    }
-
-    public function addEnrolledCGT(Request $request)
-    {
-        return $request->all();
     }
 
     public function createCenter(Request $req) {
@@ -426,6 +438,20 @@ class PageController extends Controller
 
     }
 
+    public function updateClientCGT( Request $request )
+    {
+        // return $request->all();
+        $record = ClientCGT::where('enroll_id', $request->enroll_id );
+        if($record->exists()) {
+            $record->update(['revised' => true ]);
+        } else {
+            ClientCGT::create([
+                'enroll_id' => $request->enroll_id,
+                'revised'   => false
+            ]);
+        }
+        return $this->added('CGT uploaded!');
+    }
     public function getGRTClients(Request $req)  // client GRT home
     {
         $term = $req->name;
@@ -1091,17 +1117,18 @@ class PageController extends Controller
     {
         $enrolls = Enrollment::where('center_id', $id )
         ->where('branch_id', Center::whereId($id)->first('branch_id')->branch_id )
-        ->pluck('id');
+        ->get(['id','applicant_name as name']);
 
+        $prevloans = LoanDisbursement::whereIn('enroll_id', $enrolls->pluck('id') )->pluck('loan_id');
         $output = [];
-        $loans = ClientLoan::whereIn('enroll_id', $enrolls )->get();
+        $loans = ClientLoan::whereIn('enroll_id', $enrolls->pluck('id') )->whereNotIn('loan_id', $prevloans )->get();
         foreach( $loans as $row ){
             $output[] = [ 'value' => $row->loan_id, 'label' => $row->enroll_id."-".$row->loan_id ];
         }
         return $output;
     }
     public function getBranchEmployees( $branchID ) {
-        return Employee::where('branch', $branchID)->get(['id as value','name as label']);
+        return Employee::where('branch', $branchID)->get(['id as value',DB::raw('CONCAT(first_name, \' \', last_name) as label')]);
     }
 
     public function getCenterWorkingDay($id)

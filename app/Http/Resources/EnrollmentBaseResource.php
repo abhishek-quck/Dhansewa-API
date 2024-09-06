@@ -26,6 +26,7 @@ class EnrollmentBaseResource extends JsonResource
             'PAN'               => $this->PAN,
             'postal_pin'        => $this->postal_pin,
             'village'           => $this->village,
+            'center_id'         => $this->center_id,
             'district'          => $this->district,
             'state'             => $this->state,
             'date_of_birth'     => $this->date_of_birth,

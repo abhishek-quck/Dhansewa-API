@@ -59,6 +59,10 @@ class Enrollment extends Model
         return $this->hasMany(LoanDisbursement::class,'enroll_id','id');
     }
 
+    public function cgt():HasOne
+    {
+        return $this->hasOne(ClientCGT::class,'enroll_id');
+    }
     public function grt():HasOne
     {
         return $this->hasOne(ClientGRT::class,'enroll_id');

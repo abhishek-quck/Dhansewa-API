@@ -64,7 +64,7 @@ Route::middleware('auth:sanctum')
     Route::get('/get-clients-for-appraisal/{id?}', 'getClientsForAppraisal'); // for `Admin` side
     Route::get('/get-review-clients', 'getReviewClients');
     Route::post('/add-enrollment', 'addEnrollment');
-    Route::post('/add-cgt', 'addEnrolledCGT');
+    Route::post('/add-client-cgt', 'updateClientCGT');
     Route::post('/convert-file', 'convertFile');
     Route::post('/get-enrollment-details/{id?}', 'getEnrollmentDetails');
 	Route::post('/get-account-ledger', 'accountLedger');
