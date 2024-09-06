@@ -14,6 +14,7 @@ return new class extends Migration
         Schema::create('loan_disbursements', function (Blueprint $table) {
             $table->id();
             $table->integer('enroll_id');
+            $table->string('loan_id');
             $table->date('loan_date');
             $table->integer('loan_amount')->nullable();
             $table->integer('loan_fee')->nullable();
@@ -37,6 +38,7 @@ return new class extends Migration
             $table->string('total_expense')->default(0);
             $table->foreign('enroll_id')->references('id')->on('enrollments');
             $table->timestamps();
+            $table->softDeletes();
         });
     }
 

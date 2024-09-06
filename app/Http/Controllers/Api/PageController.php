@@ -9,6 +9,8 @@ use App\Http\Requests\AdditionalEnrollment;
 use App\Http\Requests\EmployeeRequest;
 use App\Http\Requests\LoanProductRequest;
 use App\Http\Requests\VoucherRequest;
+use App\Http\Resources\ClientLoanResource;
+use App\Http\Resources\EnrollmentBaseResource;
 use App\Http\Resources\EnrollmentResource;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
@@ -616,32 +618,69 @@ class PageController extends Controller
         }
         return Branch::where('company_id', auth()->user()->cID )->get();
     }
+
+    public function generateLoanID($encryptedId)
+    {
+        $previousLoans = ClientLoan::where('enroll_id', decrypt($encryptedId))->withTrashed(); // consider deleted loans too.
+
+        $loanID = decrypt($encryptedId); // assigned is enroll_id
+        if($previousLoans->exists())
+        {
+            // $previousLoans->delete();
+            $prev = $previousLoans->orderBy('id', 'DESC')->first('loan_id')->loan_id;
+            $hasLoan = LoanDisbursement::where('loan_id', $prev );
+            if(!$hasLoan->exists())
+            {
+                $this->badResponse['message'] = 'Client already have registered a loan id and not paid yet!';
+                return response()->json($this->badResponse );
+            }
+            list($enroll_id, $loan ) = explode('-', $prev);
+            $loanID = "$enroll_id-".((int)$loan + 1);
+        } else {
+            $loanID = "$loanID-1";
+        }
+        ClientLoan::create([
+            'enroll_id'  =>  decrypt($encryptedId),
+            'loan_id'    =>  $loanID,
+            'updated_by' =>  auth()->user()->login_id? "emp_".auth()->user()->login_id: auth()->user()->id,
+        ]);
+
+        $this->isGood['data'] = ['loan_id' => $loanID ];
+        return $this->added('Loan Id generated successfully');
+
+    }
+
+    public function viewLoanID($enroll_id)
+    {
+        return ClientLoanResource::collection(ClientLoan::where('enroll_id', $enroll_id)->withTrashed()->get());
+    }
     public function speedLoanDisburse(Request $req)
     {
         try {
             if(LoanDisbursement::create([
-                'enroll_id' => $req->client, // The id of `enrollments`
-                'loan_date' => $req->loan_date,
-                'loan_amount' => $req->loan_amount,
-                'loan_fee' => $req->loan_fee,
-                'insurance_fee' => $req->insurance_fee,
-                'gst' => $req->gst,
-                'loan_product_id' => $req->loan_product,
-                'funding_by' => $req->funding_by,
-                'policy' => $req->policy,
-                'utilization' => $req->utilization,
-                'first_installment'=> $req->first_installment,
-                'number_of_emis' => $req->number_of_emis,
-                'payment_mode' => $req->payment_mode,
-                'self_income'  =>  $req->self_income,
-                'husband_income'  =>  $req->husband_income,
-                'other_income'  =>  $req->other_income,
-                'total_income'  =>  $req->total_income,
-                'direct_income'  =>  $req->direct_income,
-                'business_expense'  =>  $req->business_expense,
-                'household_expense'  =>  $req->household_expense,
-                'loan_installment'  =>  $req->loan_installment,
-                'total_expense'  =>  $req->total_expense
+                'enroll_id'         => $req->client, // The id of `enrollments`
+                'loan_id'           => $req->loan_id,
+                'loan_date'         => $req->loan_date,
+                'loan_amount'       => $req->loan_amount,
+                'loan_fee'          => $req->loan_fee,
+                'insurance_fee'     => $req->insurance_fee,
+                'gst'               => $req->gst,
+                'loan_product_id'   => $req->loan_product,
+                'funding_by'        => $req->funding_by,
+                'policy'            => $req->policy,
+                'utilization'       => $req->utilization,
+                'first_installment' => $req->first_installment,
+                'number_of_emis'    => $req->number_of_emis,
+                'payment_mode'      => $req->payment_mode,
+                'self_income'       => $req->self_income,
+                'husband_income'    => $req->husband_income,
+                'other_income'      => $req->other_income,
+                'total_income'      => $req->total_income,
+                'direct_income'     => $req->direct_income,
+                'business_expense'  => $req->business_expense,
+                'household_expense' => $req->household_expense,
+                'loan_installment'  => $req->loan_installment,
+                'total_expense'     => $req->total_expense
             ])){
                 $this->isGood['message'] = 'Loan successfully disbursed!';
                 return $this->isGood;
@@ -1039,9 +1078,13 @@ class PageController extends Controller
         ->get(['id as value','applicant_name as label']);
     }
 
+    public function getBranchClientInformation($id)
+    {
+        return EnrollmentBaseResource::collection(Enrollment::where('branch_id', $id )->get());;
+    }
     public function getCenterClientInformation($id)
     {
-        return Enrollment::where('center_id', $id )->get();
+        return EnrollmentBaseResource::collection(Enrollment::where('center_id', $id )->get());
     }
 
     public function getCenterLoans($id)

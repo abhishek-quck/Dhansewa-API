@@ -82,6 +82,8 @@ Route::middleware('auth:sanctum')
     Route::get('/get-disbursement-details/{id?}', 'getDisbursmentDetails');
     Route::post('/create-branch', 'createBranch');
     Route::post('/get-client-information', 'completeClientInfo');
+    Route::get('/initiate-client-loan/{enroll_id}', 'generateLoanID');
+    Route::get('/view-client-loan/{enroll_id}', 'viewLoanID');
     Route::post('/speed-loan-disburse', 'speedLoanDisburse');
     Route::post('/search-in-loan', 'searchInLoan');
     Route::post('/search-client-ledger', 'searchClientLedger');
@@ -112,6 +114,7 @@ Route::middleware('auth:sanctum')
     Route::get('/get-branch-collection/{branch_id?}','getBranchCollection');
     Route::get('/get-branch-centers/{branch_id?}','getBranchCenters');
     Route::get('/get-center-clients/{center_id?}','getCenterClients');
+    Route::get('/get-branch-client-info/{branch_id?}','getBranchClientInformation');
     Route::get('/get-center-client-info/{center_id?}','getCenterClientInformation');
     Route::get('/get-center-loans/{center_id?}','getCenterLoans');
     Route::get('/get-center-working-days/{center_id?}','getCenterWorkingDay');

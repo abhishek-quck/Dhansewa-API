@@ -11,9 +11,14 @@ return new class extends Migration
      */
     public function up(): void
     {
+        Schema::dropIfExists('client_loans');
         Schema::create('client_loans', function (Blueprint $table) {
+            $table->id();
             $table->foreignId('enroll_id')->references('id')->on('enrollments');
-            $table->foreignId('loan_id')->references('loan_id')->on('loan_disbursements');
+            $table->string('loan_id');
+            $table->string('updated_by');
+            $table->timestamps();
+            $table->softDeletes();
         });
     }
 
