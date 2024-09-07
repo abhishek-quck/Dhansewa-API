@@ -11,10 +11,14 @@ return new class extends Migration
      */
     public function up(): void
     {
+        Schema::dropIfExists('client_cgt');
         Schema::create('client_cgt', function (Blueprint $table) {
             $table->id();
             $table->foreignId('enroll_id')->references('id')->on('enrollments');
             $table->boolean('revised')->default(false);
+            $table->boolean('status')->default(false);
+            $table->string('remarks')->nullable();
+            $table->string('updated_by')->nullable();
             $table->timestamps();
             $table->softDeletes();
         });

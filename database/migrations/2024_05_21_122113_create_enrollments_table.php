@@ -37,6 +37,7 @@ return new class extends Migration
             $table->boolean('review')->default(0)->nullable();
             $table->boolean('sent_back')->default(0)->nullable();
             $table->boolean('approved')->default(0)->nullable();
+            $table->boolean('cgt_complete')->default(false)->nullable();
             $table->string('company_id');
             $table->timestamps();
         });

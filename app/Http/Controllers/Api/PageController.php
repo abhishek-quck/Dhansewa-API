@@ -208,26 +208,73 @@ class PageController extends Controller
         }
     }
 
-    public function searchEnrolled(Request $request)
+    public function searchEnrolled(Request $request, $id = null)
     {
         $term = $request->term;
         $branch = $request->branch;
         $enroll = new Enrollment;
         $enroll = $enroll->where('company_id', Auth::user()->cID );
 
-        if( $request->process ) {
+        if($id)
+        {
+            return EnrollmentResource::collection(Enrollment::whereId($id)->with( ['branch', 'documents'=> function($q){
+                $q->whereIn('document_id', [5,6])->select('enroll_id', 'file_name', 'data');
+            }])->get());
+        }
+        if( $request->process ) {  // this will always be filled in CGT section
             if( $branch ) {
                 $enroll = $enroll->where('branch_id', $branch );
             }
-            $enroll = $enroll->where(function($query){
-                $query->doesntHave('cgt')->orWhereHas( 'cgt', function($q){
-                    $q->where('revised', false);
+            $process = $request->process;
+            /*  pending -done
+                cgt_entry - done
+                cgt_revised - done
+                approved - done
+                reject - done
+                forgery - done  */
+
+            $status = [
+                'approved' => 1,
+                'reject'   => 2,
+                'forgery'  => 3,
+            ];
+
+            if(in_array($process, ['approved','reject','forgery'])) {
+                $stat = $status[$process];
+                if($stat == 1) {
+                    $enroll = $enroll->where('cgt_complete', true );
+                }
+                $enroll = $enroll->whereHas('cgt', function($q) use ($stat) {
+                    $q->where('status', $stat )->select('id as cgt_id','enroll_id','revised');
                 });
-            });
-            // $enroll = $enroll->doesntHave('cgt')->orWhereHas( 'cgt', function($q){
-            //     $q->where('revised', false);
-            // });
-        } else {
+            }
+
+            if( in_array($process, ['pending','cgt_entry','cgt_revised']) )
+            {
+                if( $process == 'pending' ) {
+                    $enroll = $enroll->doesntHave('cgt');
+                } else {
+                    $enroll = $enroll->where(function($query) use ($process){
+                        if($process=='cgt_revised') {
+                            $query = $query->where('cgt_complete', false);
+                        }
+                        $query->whereHas('cgt', function($q) use ($process) {
+                            $q->where('revised', $process =='cgt_revised');
+                        });
+                    });
+                }
+            }
+
+            $enroll = $enroll->with([
+                'cgt' => function($qu) {
+                    $qu->select('id as cgt_id','enroll_id','revised');
+                },
+                'documents' => function($fn) {
+                    $fn->whereIn('document_id', [5,6] )->select('enroll_id', 'data','document_id');
+                }
+            ]);
+
+        } else { // for all other endpoints e.g enrollments
             if( $branch ) {
                 $enroll = $enroll->where('branch_id', $branch );
             }
@@ -243,6 +290,33 @@ class PageController extends Controller
         return response()->json( $enroll->get(), 200 );
     }
 
+    public function updateClientCgtStatus(Request $request)
+    {
+        // return $request->all();
+        try {
+            $record = ClientCGT::where('enroll_id', $request->enroll_id );
+            if($record->exists())
+            {
+                $record->update([
+                    'remarks'    => $request->remark,
+                    'status'     => $request->status,
+                    'updated_by' => auth()->user()->login_id? "emp_".auth()->user()->login_id: auth()->user()->id,
+                ]);
+            } else {
+                throw new Exception('Upload CGT documents at first');
+            }
+
+            Enrollment::whereId($request->enroll_id)->update([
+                'cgt_complete'  => $request->status == 1
+            ]);
+
+            return $this->added('Status updated successfully!');
+
+        } catch (\Throwable $e ) {
+            Log::info( 'Error in updating status: '.$e->getMessage() );
+            return response()->json( $this->badResponse, 500 );
+        }
+    }
     public function previewDocument($client, $id)
     {
         $file = DB::table('client_documents')
@@ -257,7 +331,7 @@ class PageController extends Controller
         // DB::beginTransaction();
         try
         {
-            // DB::transaction(function($req) {
+            DB::transaction(function () use ($req) {
             $enroll = Enrollment::create($data=[
                 'branch_id'       => $req->branch_id ??'',
                 'aadhaar'         => $req->aadhaar ??'',
@@ -285,14 +359,11 @@ class PageController extends Controller
             if($enroll)
             {
                 $addOns = [ 'enroll_id' => $enroll->id ];
-                foreach($req->all() as $key => $input)
-                {
+                foreach($req->all() as $key => $input) {
                     if(!isset($data[$key]) && !in_array($key,['kyc','passbook'])) $addOns[$key] = $input;
                 }
-                foreach(['KYC'=> $req->kyc, 'Passbook'=> $req->passbook] as $key => $file )
-                {
-                    if($file && $file!='null')
-                    {
+                foreach(['KYC'=> $req->kyc, 'Passbook'=> $req->passbook] as $key => $file ) {
+                    if($file && $file!='null') {
                         $pre='';
                         $b64 = base64_encode($file->get());
                         switch($file->extension())
@@ -315,14 +386,13 @@ class PageController extends Controller
                     }
                 }
 
-                if(EnrollmentAdditional::create($addOns))
-                {
+                if(EnrollmentAdditional::create($addOns)) {
                     $this->isGood['message']='Enrollment added successfully!';
                     return response()->json($this->isGood, 200);
                 }
             }
             return response()->json($this->badResponse, 500 );
-            // });
+        });
         } catch( Exception $e ) {
             DB::rollback();
             $this->badResponse['message']=$e->getMessage();
@@ -364,7 +434,7 @@ class PageController extends Controller
 
     public function getCenters(Request $req)
     {
-        return [['center_id'=>'001','center'=>'Lapata Ganj','a'=>'Kirchoff','lc'=>'LC','staff'=>'1901' ]];
+        // return [['center_id'=>'001','center'=>'Lapata Ganj','a'=>'Kirchoff','lc'=>'LC','staff'=>'1901' ]];
         $table = DB::table('centers');
         if($req->search)
         {
@@ -440,42 +510,80 @@ class PageController extends Controller
 
     public function updateClientCGT( Request $request )
     {
-        // return $request->all();
-        $record = ClientCGT::where('enroll_id', $request->enroll_id );
-        if($record->exists()) {
-            $record->update(['revised' => true ]);
-        } else {
-            ClientCGT::create([
-                'enroll_id' => $request->enroll_id,
-                'revised'   => false
-            ]);
+        try {
+            $docs = [];
+            $docNames = [
+                'first_day' => 'CGT_First',
+                'second_day'=> 'CGT_Second'
+            ];
+            foreach ([
+                    'first_day'  =>  $request->first_day,
+                    'second_day' =>  $request->second_day
+                ] as $name => $file
+            ) {
+                if($file)
+                {
+                    $prefix='';
+                    switch($file->extension()) {
+                        case 'jpg': case 'jpeg':
+                            $prefix = 'data:image/jpeg;base64,';
+                        break;
+                        case 'png':
+                            $prefix = 'data:image/png;base64,';
+                        break;
+                        case 'webp':
+                            $prefix = 'data:image/webp;base64,';
+                        break;
+                    }
+                    $docs[] = [
+                        'document_id' => Document::where('name', $docNames[$name])->first('id')->id,
+                        'enroll_id' => $request->enroll_id,
+                        'data' => $prefix.base64_encode($file->get()),
+                        'file_name' => strtoupper($name).".".$file->extension()
+                    ];
+                }
+            }
+
+            foreach( $docs as $doc ) {
+                ClientDocument::create($doc); // as of now there's no chance to update whats already there so... only insert
+            }
+
+            $record = ClientCGT::where('enroll_id', $request->enroll_id );
+            if($record->exists()) {
+                $record->update(['revised' => true ]);
+            } else {
+                ClientCGT::create([
+                    'enroll_id' => $request->enroll_id,
+                    'revised'   => count($docs) == 2
+                ]);
+            }
+            return $this->added('CGT uploaded!');
+
+        } catch (\Throwable $th) {
+            $this->badResponse['message'] = $th->getMessage();
+            return response()->json($this->badResponse, 500 );
         }
-        return $this->added('CGT uploaded!');
     }
     public function getGRTClients(Request $req)  // client GRT home
     {
         $term = $req->name;
-        if($req->branchID)
-        {
+        if($req->branchID) {
             $enrollments = Enrollment::where('branch_id', $req->branchID);
-        }else {
+        } else {
             $enrollments = new Enrollment;
         }
-        if($term)
-        {
+        if($term) {
             $enrollments->where(function($q) use ($term){
                 $q->where('applicant_name','like',"%$term%")
                 ->orWhere('aadhaar','like',"%$term%");
             });
         }
 
-        $enrollments = $enrollments->where('company_id', Auth::user()->cID )->doesntHave('grt')// The ones who haven't grt yet
+        return $enrollments->where('cgt_complete', true )->where('company_id', Auth::user()->cID )->doesntHave('grt')// The ones who haven't grt yet
         ->get([
             DB::raw('DATE_FORMAT(created_at, \'%d-%m-%Y\') as Date, applicant_name as Fullname,
             CONCAT(village, \'-\',district,\', \', state) as address, phone, "memID" as memberID, "SPEED_ENROLLMENT" as status, id, enrollments.*')
         ]);
-        // return [$enrollments->toRawSql(),Auth::user()->cID,$term];
-        return $enrollments;
     }
 
     public function updateClientGRT(Request $req)  // Client GRT-review
@@ -498,21 +606,6 @@ class PageController extends Controller
                 'grt_date'  => now()
             ];
 
-            // if($req->visit_photo && $req->visit_photo!=='null')
-            // {
-            //     $prefix='';
-            //     switch($req->visit_photo->extension())
-            //     {
-            //         case 'jpg': case 'jpeg':
-            //             $prefix = 'data:image/jpeg;base64,';
-            //             break;
-            //         case 'png':
-            //             $prefix = 'data:image/png;base64,';
-            //             break;
-            //     }
-            //     $imageData = base64_encode($req->visit_photo->get());
-            //     $grt['visit_photo'] = $prefix.$imageData;
-            // }
             foreach(['visit_photo' => $req->visit_photo, 'group_photo' => $req->group_photo ] as $name => $file )
             {
                 if( $file == 'null') continue;
@@ -1222,7 +1315,9 @@ class PageController extends Controller
     public function getClientsForAppraisal($id=null) // under `Manage Client`
     {
         if( $id ) {
-            return EnrollmentResource::collection(Enrollment::whereId($id)->with('branch','otherInfo','documents')->get());
+            return EnrollmentResource::collection(Enrollment::whereId($id)->with(['branch','otherInfo','documents'=>function($q){
+                $q->whereNotIn('document_id', [5,6,7])->select('enroll_id','file_name', 'data');
+            }])->get());
         }
         return DB::table('enrollments as e')->join('branches','branches.id', 'e.branch_id')
         ->whereNotIn('e.id', DB::table('credit_appraisals')->pluck('enroll_id')->toArray()) // jinka check pahle nhi hua hai
@@ -1239,6 +1334,7 @@ class PageController extends Controller
     public function updateClientAppraisalStatus( Request $request ) {
 
         try {
+           DB::transaction(function() use ($request){
             $record = CreditAppraisal::where('enroll_id', $request->enroll_id );
             if($record->exists())
             {
@@ -1260,9 +1356,27 @@ class PageController extends Controller
                 'approved'  => $request->status == 1
             ]);
 
+            if( $request->status == 1 ) // generate loan_id as soon as credit is approved
+            {
+                $data = $this->generateLoanID( encrypt($request->enroll_id) );
+                Log::info(json_encode($data));
+                $loanID = $data['loan_id'];
+                $view = view('reports.sanctionLetter', compact('loanID'));
+                $dompdf = generatePdf($view, null, false, true);
+                $content = $dompdf->output();
+                $pdf = 'data:application/pdf;base64,'.base64_encode($content);
+                ClientDocument::create([
+                    'enroll_id' => $request->enroll_id,
+                    'document_id' => Document::where('name','like', '%sanction%')->first('id')->id,
+                    'data'      => $pdf,
+                    'file_name' => date('d_m_Y').'_Sanction_Letter.pdf'
+                ]);
+            }
             return $this->added('Status updated successfully!');
 
+           });
         } catch (\Throwable $e ) {
+            DB::rollBack();
             Log::info( 'Error in updating status: '.$e->getMessage() );
             return response()->json( $this->badResponse, 500 );
         }
