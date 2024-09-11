@@ -777,7 +777,7 @@ class PageController extends Controller
     {
         try {
             if(LoanDisbursement::create([
-                'enroll_id'         => $req->client, // The id of `enrollments`
+                'enroll_id'         => $req->enroll_id,
                 'loan_id'           => $req->loan_id,
                 'loan_date'         => $req->loan_date,
                 'loan_amount'       => $req->loan_amount,
@@ -988,8 +988,8 @@ class PageController extends Controller
     {
         try
         {
-            if($id===null) $id = $request->client;
-            return LoanDisbursement::whereId($id)->with('client')->get();
+            if($id===null) $id = $request->loan_id;
+            return LoanDisbursement::where('loan_id', $id)->with('client')->get();
         } catch (\Throwable $th) {
             $this->badResponse['message']=$th->getMessage();
             return response()->json($this->badResponse, 500);
@@ -1235,8 +1235,18 @@ class PageController extends Controller
     }
     public function dayClose($branchID)
     {
-        return [ 'todo day-close for '.$branchID ];
+        // first of all get the `ids` of clients of the branch
+        $clients = Enrollment::where('branch_id', $branchID )->where('center_id', '<>', null )->pluck('id');
+        // check them for latest loan-id they generated in loan_clients
+        $loanIDs = [];
+        foreach ($clients as $client ) {
+            $loanIDs[] = ClientLoan::where('enroll_id', $client)->latest('loan_id')->loan_id;
+        }
+        // pull the latest loan information
+        $loans = LoanDisbursement::whereIn('loan_id', $loanIDs )->get();
+        return [ 'clients' => $clients , 'loanIDs' => $loanIDs, 'loans'=> $loans ];
     }
+
     public function getDesignations()
     {
         return Designation::get(['name','abbr']);
@@ -1336,8 +1346,7 @@ class PageController extends Controller
 
         try {
             $record = CreditAppraisal::where('enroll_id', $request->enroll_id );
-            if($record->exists())
-            {
+            if($record->exists()) {
                 $record->update([
                     'remarks' => $request->remark,
                     'status'  => $request->status
