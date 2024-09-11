@@ -37,6 +37,7 @@ return new class extends Migration
             $table->string('loan_installment')->default(0);
             $table->string('total_expense')->default(0);
             $table->foreign('enroll_id')->references('id')->on('enrollments');
+            $table->boolean('completed')->default(false);
             $table->timestamps();
             $table->softDeletes();
         });

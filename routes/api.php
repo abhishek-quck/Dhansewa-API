@@ -87,7 +87,7 @@ Route::middleware('auth:sanctum')
     Route::get('/view-client-loan/{enroll_id}', 'viewLoanID');
     Route::post('/speed-loan-disburse', 'speedLoanDisburse');
     Route::post('/search-in-loan', 'searchInLoan');
-    Route::post('/search-client-ledger', 'searchClientLedger');
+    Route::post('/get-client-ledger', 'getClientLedger');
 
     Route::get('/get-branches/{branch_id?}','getBranches');
     Route::get('/get-branch-info/{branch_id?}','getBranchInfo');

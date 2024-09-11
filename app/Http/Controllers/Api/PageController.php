@@ -823,14 +823,9 @@ class PageController extends Controller
         return response()->download(public_path('aaa.txt'));
     }
 
-    public function searchClientLedger(Request $req) // while ledger generate from header
+    public function getClientLedger(Request $req) // while ledger generate from header
     {
-        return $req->all();
-        $term = $req->search;
-        $ledgers = Ledger::where('')->where(function($q) use ($term){
-            $q->where('falana','like',"%$term%");
-        })->get();
-        return $ledgers;
+        return Ledger::where('enroll_id', $req->client )->where('loan_id', $req->loan_id )->get();
     }
 
     // Filling the select inputs
@@ -1053,7 +1048,7 @@ class PageController extends Controller
 
     public function getDisbursmentDetails($id)
     {
-        return LoanDisbursement::where('enroll_id',$id)->with('client')->without('latestDocument')->first();
+        return LoanDisbursement::where('enroll_id',$id)->with('client')->without('latestDocument')->first()??[];
     }
 
     public function updateAdditionEnrollmentInfo(AdditionalEnrollment $request)
@@ -1235,16 +1230,60 @@ class PageController extends Controller
     }
     public function dayClose($branchID)
     {
+        $today = strtolower(now()->format('l'));
         // first of all get the `ids` of clients of the branch
         $clients = Enrollment::where('branch_id', $branchID )->where('center_id', '<>', null )->pluck('id');
-        // check them for latest loan-id they generated in loan_clients
-        $loanIDs = [];
-        foreach ($clients as $client ) {
-            $loanIDs[] = ClientLoan::where('enroll_id', $client)->latest('loan_id')->loan_id;
+        // Check them for latest loan-id they generated in loan_clients
+        $loanIDs = ClientLoan::whereIn('enroll_id', $clients->toArray())->pluck('loan_id');
+        // Pull up all the loan's information
+        $loans = LoanDisbursement::whereIn('loan_id', $loanIDs->toArray() )->with(['client' => function($q){
+            $q->select('id', 'center_id');
+        }])->get();
+        foreach ($loans as $loan ) {
+            // Log::info('with client: ', $loan->client->toArray());
+            // Everything starts when today is the meeting day of center.
+            if( $today == Center::whereId( $loan->client->center_id )->first('meeting_days')?->meeting_days )
+            {
+                if( !$loan->completed ) {
+
+                    $loanProduct = LoanProduct::whereId( $loan->loan_product_id )->first();
+                    $chargeToday = round((float) $loanProduct->amount / $loanProduct->installments, 2 );
+                    $lastTransaction = Ledger::where('loan_id', $loan->loan_id );
+
+                    $emiNum = 1;
+                    $wasToday = false;
+
+                    if($lastTransaction->exists()) {
+                        $emiNum   = $lastTransaction->count() + 1;
+                        $wasToday = $lastTransaction->orderBy('created_at', 'desc')->first();
+                        $wasToday = now()->format('d') == date('d', strtotime($wasToday->created_at));
+                    }
+
+                    if(!$wasToday ) {
+
+                        Ledger::create([
+                            'enroll_id'         => $loan->enroll_id,
+                            'loan_id'           => $loan->loan_id,
+                            'emi_no'            => $emiNum,
+                            'transaction_date'  => now(),
+                            'pr_due'            => 0,
+                            'int_due'           => 0,
+                            'total_due'         => $chargeToday,
+                            'pr_collected'      => 0,
+                            'int_collected'     => 0,
+                            'total_collected'   => $chargeToday,
+                        ]);
+                        $loan->update([ 'completed' => $emiNum == $loanProduct->installments ]);
+
+                    } else {
+                        return $this->withError('Day already closed!', PageController::BAD_REQUEST);
+                    }
+                }
+
+            }
         }
-        // pull the latest loan information
-        $loans = LoanDisbursement::whereIn('loan_id', $loanIDs )->get();
-        return [ 'clients' => $clients , 'loanIDs' => $loanIDs, 'loans'=> $loans ];
+        return $this->added('Day close process completed!');
+
     }
 
     public function getDesignations()
@@ -1424,7 +1463,7 @@ class PageController extends Controller
 
         foreach($branches as $branch) {
             if( isset($finalAmount["BR_$branch->id"])) {
-                $branch->dues = $finalAmount["BR_$branch->id"]." ₹";
+                $branch->dues = round($finalAmount["BR_$branch->id"], 2)." ₹";
             } else {
                 $branch->dues = "0 ₹";
             }
