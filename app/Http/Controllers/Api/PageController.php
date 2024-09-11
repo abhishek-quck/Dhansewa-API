@@ -758,13 +758,13 @@ class PageController extends Controller
         } else {
             $loanID = "$loanID-1";
         }
-        ClientLoan::create([
+        $loan = ClientLoan::create([
             'enroll_id'  =>  decrypt($encryptedId),
             'loan_id'    =>  $loanID,
             'updated_by' =>  auth()->user()->login_id? "emp_".auth()->user()->login_id: auth()->user()->id,
         ]);
 
-        $this->isGood['data'] = ['loan_id' => $loanID ];
+        $this->isGood['loan'] = $loan;
         return $this->added('Loan Id generated successfully');
 
     }
@@ -1208,15 +1208,16 @@ class PageController extends Controller
 
     public function getCenterLoans($id)
     {
-        $enrolls = Enrollment::where('center_id', $id )
-        ->where('branch_id', Center::whereId($id)->first('branch_id')->branch_id )
-        ->get(['id','applicant_name as name']);
-
+        $enrolls = Enrollment::where('center_id', $id )->get(['id','applicant_name as name']);
+        $names = [];
+        foreach($enrolls as $row) {
+            $names[$row->id] = $row->name;
+        }
         $prevloans = LoanDisbursement::whereIn('enroll_id', $enrolls->pluck('id') )->pluck('loan_id');
         $output = [];
         $loans = ClientLoan::whereIn('enroll_id', $enrolls->pluck('id') )->whereNotIn('loan_id', $prevloans )->get();
         foreach( $loans as $row ){
-            $output[] = [ 'value' => $row->loan_id, 'label' => $row->enroll_id."-".$row->loan_id ];
+            $output[] = [ 'value' => $row->loan_id, 'label' => $row->loan_id." ".$names[$row->enroll_id] ];
         }
         return $output;
     }
@@ -1334,7 +1335,6 @@ class PageController extends Controller
     public function updateClientAppraisalStatus( Request $request ) {
 
         try {
-           DB::transaction(function() use ($request){
             $record = CreditAppraisal::where('enroll_id', $request->enroll_id );
             if($record->exists())
             {
@@ -1360,23 +1360,23 @@ class PageController extends Controller
             {
                 $data = $this->generateLoanID( encrypt($request->enroll_id) );
                 Log::info(json_encode($data));
-                $loanID = $data['loan_id'];
-                $view = view('reports.sanctionLetter', compact('loanID'));
+                $loanID = $data['loan']->loan_id;
+                $fileName = date('d_m_Y').'_Sanction_Letter.pdf';
+                $view = view('reports.sanctionLetter', compact('loanID', 'fileName'));
                 $dompdf = generatePdf($view, null, false, true);
                 $content = $dompdf->output();
                 $pdf = 'data:application/pdf;base64,'.base64_encode($content);
-                ClientDocument::create([
+                $document = ClientDocument::create([
                     'enroll_id' => $request->enroll_id,
                     'document_id' => Document::where('name','like', '%sanction%')->first('id')->id,
                     'data'      => $pdf,
-                    'file_name' => date('d_m_Y').'_Sanction_Letter.pdf'
+                    'file_name' => $fileName
                 ]);
+                $this->isGood['sanction_letter'] = $document;
             }
             return $this->added('Status updated successfully!');
 
-           });
         } catch (\Throwable $e ) {
-            DB::rollBack();
             Log::info( 'Error in updating status: '.$e->getMessage() );
             return response()->json( $this->badResponse, 500 );
         }
