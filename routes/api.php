@@ -68,9 +68,11 @@ Route::middleware('auth:sanctum')
     Route::post('/convert-file', 'convertFile');
     Route::post('/get-enrollment-details/{id?}', 'getEnrollmentDetails');
 	Route::post('/get-account-ledger', 'accountLedger');
-    Route::post('/search-enrolled/{id?}', 'searchEnrolled');
+    Route::post('/search-enrolled/{id?}/{docID?}', 'searchEnrolled');
     Route::post('/update-client-appraisal-status', 'updateClientAppraisalStatus');
     Route::post('/update-client-cgt-status', 'updateClientCgtStatus');
+    Route::post('/upload-client-passbook', 'updateClientPassbook');
+    Route::post('/act-on-passbook', 'actOnClientPassbook');
 
     Route::post('/update-permissions', 'updatePermissions');
     Route::post('/update-report-access', 'updateReportAccess');

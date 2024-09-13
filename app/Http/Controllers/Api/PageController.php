@@ -22,6 +22,7 @@ use App\Models\{Account, AccountHead,
     ClientDocument,
     ClientGRT,
     ClientLoan,
+    ClientPassbook,
     Company,
     CreditAppraisal,
     Designation,
@@ -208,7 +209,7 @@ class PageController extends Controller
         }
     }
 
-    public function searchEnrolled(Request $request, $id = null)
+    public function searchEnrolled(Request $request, $id = null, $docID=null)
     {
         $term = $request->term;
         $branch = $request->branch;
@@ -217,8 +218,13 @@ class PageController extends Controller
 
         if($id)
         {
+            if($docID) {
+                return EnrollmentResource::collection(Enrollment::whereId($id)->with( ['branch', 'documents'=> function($q) use ($docID){
+                    $q->where('document_id', $docID )->select('enroll_id', 'document_id', 'file_name', 'data');
+                }])->get());
+            }
             return EnrollmentResource::collection(Enrollment::whereId($id)->with( ['branch', 'documents'=> function($q){
-                $q->whereIn('document_id', [5,6])->select('enroll_id', 'file_name', 'data');
+                $q->whereIn('document_id', [5,6])->select('enroll_id', 'document_id', 'file_name', 'data');
             }])->get());
         }
         if( $request->process ) {  // this will always be filled in CGT section
@@ -1524,6 +1530,64 @@ class PageController extends Controller
             return $this->withError( 'Failed to add the transaction!', 500);
         }
 
+    }
+
+    public function updateClientPassbook(Request $request) {
+
+        try {
+
+            $pre='';
+            $b64 = base64_encode($request->passbook->get());
+            switch($request->passbook->extension())
+            {
+                case 'jpg':case'jpeg':
+                    $pre = 'data:image/jpeg,base64';
+                    break;
+                case 'png':
+                    $pre = 'data:image/png;base64,';
+                    break;
+                case 'pdf':
+                    $pre = 'data:application/pdf;base64,';
+                    break;
+            }
+
+            if(ClientDocument::create([
+                'enroll_id'   => $request->enroll_id,
+                'document_id' => $request->doc_id,
+                'data'        => $pre.$b64,
+                'file_name'   => 'Post_Appraisal_.'.$request->passbook->extension()
+            ])) {
+                return $this->added('Passbook successfully uploaded!');
+            }
+
+        } catch(\Throwable $e) {
+            return $this->withError($e->getMessage(), 500);
+        }
+    }
+
+    public function actOnClientPassbook(Request $request) {
+        try {
+            $record = ClientPassbook::where('enroll_id', $request->enroll_id );
+            if($record->exists()) {
+                $record->update([
+                    'remarks' => $request->remark,
+                    'status'  => $request->status
+                ]);
+            } else {
+                ClientPassbook::create([
+                    'enroll_id'  => $request->enroll_id,
+                    'status'     => $request->status,
+                    'remarks'    => $request->remark,
+                    'updated_by' => auth()->user()->id
+                ]);
+            }
+
+            return $this->added('Status updated successfully!');
+
+        } catch (\Throwable $e ) {
+            Log::info( 'Error in updating status: '.$e->getMessage() );
+            return response()->json( $this->badResponse, 500 );
+        }
     }
 
 }
