@@ -53,6 +53,10 @@ class Enrollment extends Model
     {
         return $this->hasOne(Branch::class,'id','branch_id');
     }
+    public function center():HasOne
+    {
+        return $this->hasOne(Center::class,'id','center_id');
+    }
 
     public function loan():HasMany
     {

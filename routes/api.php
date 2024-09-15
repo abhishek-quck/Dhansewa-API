@@ -107,9 +107,11 @@ Route::middleware('auth:sanctum')
     Route::get('/get-loan-products/{id?}','getLoanProducts');
     Route::get('/get-product-details/{id}','getLoanProductDetails');
     Route::get('/loan-products-options','getLoanProductsOptions');
+    Route::get('/get-loan-details/{loanId?}', 'getLoanDetails');
     Route::post('add-amount-on-loan-product','addAmountToLoanProduct');
     Route::post('/manage-product/{id?}','manageProduct');
     Route::post('/update-additional-enroll-information','updateAdditionEnrollmentInfo');
+    Route::post('/put-sanction-letter', 'saveSanctionLetter');
 
     Route::get('/day-close/{branch_id}', 'dayClose');
     Route::get('/day-initialize/{branch_id}', 'dayInit');

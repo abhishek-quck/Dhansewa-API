@@ -759,10 +759,10 @@ class PageController extends Controller
                 $this->badResponse['message'] = 'Client already have registered a loan id and not paid yet!';
                 return response()->json($this->badResponse );
             }
-            list($enroll_id, $loan ) = explode('-', $prev);
-            $loanID = "$enroll_id-".((int)$loan + 1);
+            list($enroll_id, $loan ) = explode(':', $prev);
+            $loanID = "$enroll_id:".((int)$loan + 1);
         } else {
-            $loanID = "$loanID-1";
+            $loanID = "$loanID:1";
         }
         $loan = ClientLoan::create([
             'enroll_id'  =>  decrypt($encryptedId),
@@ -1413,20 +1413,20 @@ class PageController extends Controller
             if( $request->status == 1 ) // generate loan_id as soon as credit is approved
             {
                 $data = $this->generateLoanID( encrypt($request->enroll_id) );
-                Log::info(json_encode($data));
-                $loanID = $data['loan']->loan_id;
-                $fileName = date('d_m_Y').'_Sanction_Letter.pdf';
-                $view = view('reports.sanctionLetter', compact('loanID', 'fileName'));
-                $dompdf = generatePdf($view, null, false, true);
-                $content = $dompdf->output();
-                $pdf = 'data:application/pdf;base64,'.base64_encode($content);
-                $document = ClientDocument::create([
-                    'enroll_id' => $request->enroll_id,
-                    'document_id' => Document::where('name','like', '%sanction%')->first('id')->id,
-                    'data'      => $pdf,
-                    'file_name' => $fileName
-                ]);
-                $this->isGood['sanction_letter'] = $document;
+                // Log::info(json_encode($data));
+                // $loanID = $data['loan']->loan_id;
+                // $fileName = date('d_m_Y').'_Sanction_Letter.pdf';
+                // $view = view('reports.sanctionLetter', compact('loanID', 'fileName'));
+                // $dompdf = generatePdf($view, null, false, true);
+                // $content = $dompdf->output();
+                // $pdf = 'data:application/pdf;base64,'.base64_encode($content);
+                // $document = ClientDocument::create([
+                //     'enroll_id' => $request->enroll_id,
+                //     'document_id' => Document::where('name','like', '%sanction%')->first('id')->id,
+                //     'data'      => $pdf,
+                //     'file_name' => $fileName
+                // ]);
+                // $this->isGood['sanction_letter'] = $document;
             }
             return $this->added('Status updated successfully!');
 
@@ -1590,4 +1590,27 @@ class PageController extends Controller
         }
     }
 
+    public function getLoanDetails($loanId) {
+        return Enrollment::whereId(explode(':',$loanId)[0])->with(['otherInfo', 'branch'=>function($q){
+            $q->select('id','name' );
+        },'center'=>function($q){
+            $q->select('id','name', 'meeting_days', 'district', 'state');
+        }])->first();
+    }
+
+    public function saveSanctionLetter(Request $request) {
+
+        if($doc = ClientDocument::create([
+            'enroll_id' => $request->enroll_id,
+            'document_id' => Document::where('name','like','%sanction%')->first('id')->id,
+            'file_name' => date('d_m_Y').'_sanction_letter_'.$request->enroll_id.'.pdf',
+            'data' => 'data:application/pdf;base64,'.base64_encode($request->file->get())
+        ])) {
+            $this->isGood['filename'] = $doc->file_name;
+            return $this->added('File uploaded successfully!');
+        } else {
+            return response()->json($this->badResponse, 200);
+        }
+
+    }
 }

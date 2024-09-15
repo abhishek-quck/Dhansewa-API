@@ -18,6 +18,12 @@ class Center extends Model
             set:fn($value)=>ucwords($value)
         );
     }
+    protected function meetingDays():Attribute
+    {
+        return Attribute::make(
+            get:fn($value)=>ucwords($value),
+        );
+    }
     protected function branch():Attribute
     {
         return Attribute::make(
