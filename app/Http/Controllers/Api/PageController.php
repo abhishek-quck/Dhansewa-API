@@ -375,7 +375,7 @@ class PageController extends Controller
                         switch($file->extension())
                         {
                             case 'jpg':case'jpeg':
-                                $pre = 'data:image/jpeg,base64';
+                                $pre = 'data:image/jpeg;base64,';
                                 break;
                             case 'png':
                                 $pre = 'data:image/png;base64,';
@@ -1541,7 +1541,7 @@ class PageController extends Controller
             switch($request->passbook->extension())
             {
                 case 'jpg':case'jpeg':
-                    $pre = 'data:image/jpeg,base64';
+                    $pre = 'data:image/jpeg;base64,';
                     break;
                 case 'png':
                     $pre = 'data:image/png;base64,';
