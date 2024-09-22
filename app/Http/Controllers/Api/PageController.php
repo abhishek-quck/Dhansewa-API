@@ -23,6 +23,7 @@ use App\Models\{Account, AccountHead,
     ClientGRT,
     ClientLoan,
     ClientPassbook,
+    Collection,
     Company,
     CreditAppraisal,
     Designation,
@@ -1052,6 +1053,15 @@ class PageController extends Controller
         }
     }
 
+    public function downloadSanction($clientID)
+    {
+        $doc = ClientDocument::where('enroll_id', $clientID)->where('document_id', 7)->first();
+        if(!blank($doc)) {
+            return base64_decode($doc->data);
+        } else {
+            throw new Exception('Sanction letter does\'t exist!');
+        }
+    }
     public function getDisbursmentDetails($id)
     {
         return LoanDisbursement::where('enroll_id',$id)->with('client')->without('latestDocument')->first()??[];
@@ -1153,9 +1163,10 @@ class PageController extends Controller
 
     }
 
-    public function getLoanProductDetails($id)
+    public function getLoanProductDetails($id=null)
     {
-        return LoanProduct::whereId($id)->first();
+        if($id) return LoanProduct::whereId($id)->first();
+        return LoanProduct::all();
     }
 
     public function addAmountToLoanProduct(Request $request)
@@ -1232,7 +1243,45 @@ class PageController extends Controller
     }
     public function dayInit($branchID)
     {
-        return [ 'todo day-init for '.$branchID ];
+        // return [ 'todo day-init for '.$branchID ];
+        $theNextDay = strtolower(date('l',strtotime("+ 1 day")));
+        /*
+            branch k andar center hain 
+            centers se related client hain
+            branch se bhi whi milenge ya nhi confirm karo 
+                => enrollments k andar center_id ko leta hu kyoki unke GRT ho chuke hain to wo approved waale hain (iska kuch accha tarika nikaalna hai)
+            har center ka meeting day hota hai
+            agar aaj branch k andar kisi center ka meeting day hai to kewal uss client ko uthao
+            aur uss client k loan_disbursement table me record dekho
+            waha par uske loan product id lekr EMI product ki details dekho
+            jitne installments me wo loan product aata hai usi k hisab se transaction hone hain
+            to ek installment schedule karo aaj k liye agar aj uske center ka meeting day hai
+            puraane transactions k liye client_ledger table hai waha se check kro kitne installments already ho gye hain
+            agar saare installments complete ho gye hain to loan_disbursements table me completed ko true karna hai
+        */ 
+        $activeCenters = Center::where( 'branch_id', $branchID )->where('meeting_days', $theNextDay )->pluck('id');
+        $clients = Enrollment::whereIn('center_id', $activeCenters )->pluck('id');
+        $loans = LoanDisbursement::whereIn('enroll_id', $clients )->with('loanProduct')->get();
+        $dueAmount = 0;
+        // return $loans;
+        foreach ( $loans as $loan ) {
+            // Log::info('loan info:- ', $loan->loanProduct);
+            $dueAmount += round(((float)$loan->loanProduct->amount  / $loan->loanProduct->installments ), 2);
+        }
+        
+        Collection::create([
+            'branch_id' => $branchID,
+            'date' => date('d-m-Y', strtotime("+2 day")),
+            'due'  => $dueAmount,
+            'collected'  => 0,
+            'total_center'  => count($activeCenters), // total center means centers active on the specific meeting day 
+            'total_client'  => count($loans), // no. of clients who took the loan in the respective center
+            'dbc'  => '',
+            'disb'  => '',
+        ]);
+
+        return $this->added('Day initialized successfully!');
+        
     }
     public function dayClose($branchID)
     {
@@ -1439,6 +1488,8 @@ class PageController extends Controller
 
     public function getCollections()
     {
+        $date = (string) date('d-m-Y', strtotime('+1 day'));
+        return Collection::where('date', $date )->with('branch')->get();
         $branches = Branch::where('company_id', auth()->user()->cID )->withCount(['centers','clients' => function($query){
             $query->where('center_id', '<>', null);
         }])->get();
@@ -1477,14 +1528,6 @@ class PageController extends Controller
 
         $loanProducts = $clients->pluck('loan_product_id')->unique()->toArray();
         $c = $clients->pluck('center_id')->unique()->toArray();
-
-        Log::info(json_encode([
-            'today' => now()->format('l'),
-            'centers'=> implode(', ',$c),
-            'clients'=> $clients,
-            'total_clients'=> $clients->count(),
-            'loanProducts' => implode(',', $loanProducts)
-        ]), $finalAmount );
 
         return $branches;
 
@@ -1555,9 +1598,42 @@ class PageController extends Controller
                 'enroll_id'   => $request->enroll_id,
                 'document_id' => $request->doc_id,
                 'data'        => $pre.$b64,
-                'file_name'   => 'Post_Appraisal_.'.$request->passbook->extension()
+                'file_name'   => 'Post_Appraisal_Passbook.'.$request->passbook->extension()
             ])) {
                 return $this->added('Passbook successfully uploaded!');
+            }
+
+        } catch(\Throwable $e) {
+            return $this->withError($e->getMessage(), 500);
+        }
+    }
+    
+    public function updateCibil(Request $request) {
+
+        try {
+
+            $pre='';
+            $b64 = base64_encode($request->cibil->get());
+            switch($request->cibil->extension())
+            {
+                case 'jpg':case'jpeg':
+                    $pre = 'data:image/jpeg;base64,';
+                    break;
+                case 'png':
+                    $pre = 'data:image/png;base64,';
+                    break;
+                case 'pdf':
+                    $pre = 'data:application/pdf;base64,';
+                    break;
+            }
+
+            if(ClientDocument::create([
+                'enroll_id'   => $request->enroll_id,
+                'document_id' => $request->doc_id,
+                'data'        => $pre.$b64,
+                'file_name'   => 'CIBIL_.'.$request->cibil->extension()
+            ])) {
+                return $this->added('CIBIL successfully uploaded!');
             }
 
         } catch(\Throwable $e) {

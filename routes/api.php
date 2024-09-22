@@ -72,6 +72,7 @@ Route::middleware('auth:sanctum')
     Route::post('/update-client-appraisal-status', 'updateClientAppraisalStatus');
     Route::post('/update-client-cgt-status', 'updateClientCgtStatus');
     Route::post('/upload-client-passbook', 'updateClientPassbook');
+    Route::post('/upload-cibil', 'updateCibil');
     Route::post('/act-on-passbook', 'actOnClientPassbook');
 
     Route::post('/update-permissions', 'updatePermissions');
@@ -95,6 +96,7 @@ Route::middleware('auth:sanctum')
     Route::get('/get-branch-info/{branch_id?}','getBranchInfo');
     Route::get('/preview-document/{clientID}/{id}','previewDocument');
     Route::get('/print-passbook/{clientID}','printPassbook');
+    Route::get('/download-sanction/{clientID}','downloadSanction');
     Route::get('/test','test');
     Route::post('/add-sale-products', 'addCrossSaleProducts');
 
@@ -105,7 +107,7 @@ Route::middleware('auth:sanctum')
 
     Route::get('/get-client-documents/{clientID}', 'getClientDocuments');
     Route::get('/get-loan-products/{id?}','getLoanProducts');
-    Route::get('/get-product-details/{id}','getLoanProductDetails');
+    Route::get('/get-product-details/{id?}','getLoanProductDetails');
     Route::get('/loan-products-options','getLoanProductsOptions');
     Route::get('/get-loan-details/{loanId?}', 'getLoanDetails');
     Route::post('add-amount-on-loan-product','addAmountToLoanProduct');
@@ -114,7 +116,7 @@ Route::middleware('auth:sanctum')
     Route::post('/put-sanction-letter', 'saveSanctionLetter');
 
     Route::get('/day-close/{branch_id}', 'dayClose');
-    Route::get('/day-initialize/{branch_id}', 'dayInit');
+    Route::get('/day-init/{branch_id}', 'dayInit');
     Route::get('/download-cds/{center_id}', 'downloadCDS');
     Route::get('/get-branch-collection/{branch_id?}','getBranchCollection');
     Route::get('/get-branch-centers/{branch_id?}','getBranchCenters');

@@ -28,4 +28,8 @@ class LoanDisbursement extends Model
         );
     }
 
+    public function loanProduct():BelongsTo
+    {
+        return $this->belongsTo(LoanProduct::class, 'loan_product_id' );
+    } 
 }
