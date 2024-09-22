@@ -1271,7 +1271,7 @@ class PageController extends Controller
         
         Collection::create([
             'branch_id' => $branchID,
-            'date' => date('d-m-Y', strtotime("+2 day")),
+            'date' => date('d-m-Y', strtotime("+1 day")),
             'due'  => $dueAmount,
             'collected'  => 0,
             'total_center'  => count($activeCenters), // total center means centers active on the specific meeting day 
