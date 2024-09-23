@@ -883,7 +883,7 @@ class PageController extends Controller
 
     public function getDocs()
     {
-        $docs = DB::table('documents')->get();
+        $docs = DB::table('documents')->whereIn('id', [2,3])->get();
         return $docs;
     }
 
@@ -1246,9 +1246,9 @@ class PageController extends Controller
         // return [ 'todo day-init for '.$branchID ];
         $theNextDay = strtolower(date('l',strtotime("+ 1 day")));
         /*
-            branch k andar center hain 
+            branch k andar center hain
             centers se related client hain
-            branch se bhi whi milenge ya nhi confirm karo 
+            branch se bhi whi milenge ya nhi confirm karo
                 => enrollments k andar center_id ko leta hu kyoki unke GRT ho chuke hain to wo approved waale hain (iska kuch accha tarika nikaalna hai)
             har center ka meeting day hota hai
             agar aaj branch k andar kisi center ka meeting day hai to kewal uss client ko uthao
@@ -1258,7 +1258,7 @@ class PageController extends Controller
             to ek installment schedule karo aaj k liye agar aj uske center ka meeting day hai
             puraane transactions k liye client_ledger table hai waha se check kro kitne installments already ho gye hain
             agar saare installments complete ho gye hain to loan_disbursements table me completed ko true karna hai
-        */ 
+        */
         $activeCenters = Center::where( 'branch_id', $branchID )->where('meeting_days', $theNextDay )->pluck('id');
         $clients = Enrollment::whereIn('center_id', $activeCenters )->pluck('id');
         $loans = LoanDisbursement::whereIn('enroll_id', $clients )->with('loanProduct')->get();
@@ -1268,20 +1268,20 @@ class PageController extends Controller
             // Log::info('loan info:- ', $loan->loanProduct);
             $dueAmount += round(((float)$loan->loanProduct->amount  / $loan->loanProduct->installments ), 2);
         }
-        
+
         Collection::create([
             'branch_id' => $branchID,
             'date' => date('d-m-Y', strtotime("+1 day")),
             'due'  => $dueAmount,
             'collected'  => 0,
-            'total_center'  => count($activeCenters), // total center means centers active on the specific meeting day 
+            'total_center'  => count($activeCenters), // total center means centers active on the specific meeting day
             'total_client'  => count($loans), // no. of clients who took the loan in the respective center
             'dbc'  => '',
             'disb'  => '',
         ]);
 
         return $this->added('Day initialized successfully!');
-        
+
     }
     public function dayClose($branchID)
     {
@@ -1425,6 +1425,7 @@ class PageController extends Controller
             }])->get());
         }
         return DB::table('enrollments as e')->join('branches','branches.id', 'e.branch_id')
+        ->join('client_grt as cgt', 'cgt.enroll_id', 'e.id')
         ->whereNotIn('e.id', DB::table('credit_appraisals')->pluck('enroll_id')->toArray()) // jinka check pahle nhi hua hai
         ->where('approved', false )
         ->orWhere('review', true ) // marks as `correction completed`
@@ -1455,7 +1456,7 @@ class PageController extends Controller
             }
 
             Enrollment::whereId($request->enroll_id)->update([
-                'sent_back' => $request->status == 2,
+                'sent_back' => $request->status == 3,
                 'approved'  => $request->status == 1
             ]);
 
@@ -1607,7 +1608,7 @@ class PageController extends Controller
             return $this->withError($e->getMessage(), 500);
         }
     }
-    
+
     public function updateCibil(Request $request) {
 
         try {
