@@ -367,9 +367,13 @@ class PageController extends Controller
             {
                 $addOns = [ 'enroll_id' => $enroll->id ];
                 foreach($req->all() as $key => $input) {
-                    if(!isset($data[$key]) && !in_array($key,['kyc','passbook'])) $addOns[$key] = $input;
+                    if(!isset($data[$key]) && !in_array($key,['kyc','passbook','rel_proof'])) $addOns[$key] = $input;
                 }
-                foreach(['KYC'=> $req->kyc, 'Passbook'=> $req->passbook, 'Relation_Proof'=> $req->rel_proof ] as $key => $file ) {
+                foreach([
+                    'KYC'=> $req->kyc,
+                    'Passbook'=> $req->passbook,
+                    'Relation_Proof'=> $req->rel_proof
+                ] as $key => $file ) {
                     if($file && $file!='null') {
                         $pre='';
                         $b64 = base64_encode($file->get());
