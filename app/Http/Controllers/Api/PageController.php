@@ -1128,6 +1128,38 @@ class PageController extends Controller
                             }
 
                         }
+                        if($request->rel_proof) {
+                            $fName = $request->applicant_name."_Relation_Proof.".$request->rel_proof->extension();
+                            $data = base64_encode($request->rel_proof->get());
+                            $pre='';
+                            switch ($request->rel_proof->extension()) {
+                                case 'jpg':case 'jpeg':
+                                    $pre = 'data:image/jpeg;base64,';
+                                    break;
+                                case 'pdf':
+                                    $pre = 'data:application/pdf;base64,';
+                                    break;
+                                case 'png':
+                                    $pre = 'data:image/png;base64,';
+                                    break;
+                            }
+                            $docID = Document::where('name','Relation_Proof')->first('id')->id;
+                            $clientDoc = ClientDocument::where('enroll_id', $request->enroll_id )
+                            ->where('document_id', $docID );
+
+                            if($clientDoc->exists()) {
+                                $clientDoc->update([
+                                    'data' => $pre.$data
+                                ]);
+                            } else {
+                                ClientDocument::create([
+                                    'file_name'     => $fName,
+                                    'data'          => $pre.$data,
+                                    'document_id'   => $docID ,
+                                    'enroll_id'     => $request->enroll_id
+                                ]);
+                            }
+                        }
                         return $this->updated();
                     }
                 }
