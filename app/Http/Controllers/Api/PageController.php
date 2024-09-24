@@ -369,7 +369,7 @@ class PageController extends Controller
                 foreach($req->all() as $key => $input) {
                     if(!isset($data[$key]) && !in_array($key,['kyc','passbook'])) $addOns[$key] = $input;
                 }
-                foreach(['KYC'=> $req->kyc, 'Passbook'=> $req->passbook] as $key => $file ) {
+                foreach(['KYC'=> $req->kyc, 'Passbook'=> $req->passbook, 'Relation_Proof'=> $req->rel_proof ] as $key => $file ) {
                     if($file && $file!='null') {
                         $pre='';
                         $b64 = base64_encode($file->get());
@@ -388,7 +388,8 @@ class PageController extends Controller
                         ClientDocument::create([
                             'enroll_id' => $enroll->id,
                             'data'      => $pre.$b64,
-                            'file_name' => $key.".".$file->extension()
+                            'file_name' => $key.".".$file->extension(),
+                            'document_id' => Document::where('name','like',"$key")->first('id')->id,
                         ]);
                     }
                 }
@@ -883,8 +884,7 @@ class PageController extends Controller
 
     public function getDocs()
     {
-        $docs = DB::table('documents')->whereIn('id', [2,3])->get();
-        return $docs;
+        return DB::table('documents')->whereIn('id', [2,3])->get();
     }
 
     public function createAccountHead(Request $req)
