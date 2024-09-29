@@ -172,6 +172,15 @@ class PageController extends Controller
         }
         return ['codes'=> implode(',',$empReports), 'inputs'=> $output ];
     }
+
+    public function getLiveCollectionStatus() {
+        $today = Collection::where('date', date('d-m-Y'));
+        return [
+            'centers' => $today->sum('total_center'),
+            'clients' => $today->sum('total_client'),
+            'total'   => $today->sum('collected')
+        ];
+    }
     public function getSummary( )
     {
         $output['centers'] = Center::where('company_id', Auth::user()->cID )->count();
@@ -210,7 +219,7 @@ class PageController extends Controller
         }
     }
 
-    public function searchEnrolled(Request $request, $id = null, $docID=null)
+    public function searchEnrolled(Request $request, $id = null, $docID=null) // most likely in CLient CGT
     {
         $term = $request->term;
         $branch = $request->branch;
@@ -250,6 +259,9 @@ class PageController extends Controller
                 $stat = $status[$process];
                 if($stat == 1) {
                     $enroll = $enroll->where('cgt_complete', true );
+                }
+                if($stat == 3) {
+                    $enroll = $enroll->where('review', false);
                 }
                 $enroll = $enroll->whereHas('cgt', function($q) use ($stat) {
                     $q->where('status', $stat )->select('id as cgt_id','enroll_id','revised');
@@ -302,22 +314,29 @@ class PageController extends Controller
         // return $request->all();
         try {
             $record = ClientCGT::where('enroll_id', $request->enroll_id );
+            $enrollment = Enrollment::whereId($request->enroll_id);
             if($record->exists())
             {
                 $record->update([
                     'remarks'    => $request->remark,
-                    'status'     => $request->status,
+                    'status'     => $request->status, // 1-APPROVE | 2-REJECT | 3-FURTHER
                     'updated_by' => auth()->user()->login_id? "emp_".auth()->user()->login_id: auth()->user()->id,
                 ]);
+                if($request->status== 3 ) // if status changed to `further` it should be re-uploaded by client, hence it must be sent-back
+                {
+                    $enrollment->update([
+                        'sent_back' => true
+                    ]);
+                }
             } else {
                 throw new Exception('Upload CGT documents at first');
             }
 
-            Enrollment::whereId($request->enroll_id)->update([
+            $enrollment->update([
                 'cgt_complete'  => $request->status == 1
             ]);
 
-            return $this->added('Status updated successfully!');
+            return $this->added($request->status == 1 ? 'CGT completed!':'Status updated successfully!');
 
         } catch (\Throwable $e ) {
             Log::info( 'Error in updating status: '.$e->getMessage() );
@@ -452,11 +471,10 @@ class PageController extends Controller
         {
             $table = $table->where('branch','like',"%$req->search%");
         }
-        $records = $table->get([
+        return $table->get([
             'center_id','center',
             DB::raw('select(\'dayName\') as dayName, select(\'LC\') as lc'), 'staff_id'
         ]);
-        return $records;
     }
 
     public function accountLedger(Request $request)  // the ledger transation
@@ -562,7 +580,7 @@ class PageController extends Controller
 
             $record = ClientCGT::where('enroll_id', $request->enroll_id );
             if($record->exists()) {
-                $record->update(['revised' => true ]);
+                $record->update(['revised' => true ]); // if there exists a record then it was CGT first day & this the 2nd one
             } else {
                 ClientCGT::create([
                     'enroll_id' => $request->enroll_id,
@@ -671,7 +689,7 @@ class PageController extends Controller
                     [ 'enroll_id' => $client->first()->enroll_id ]
                 );
             }
-            $this->isGood['message'] = 'Details successfully updated!';
+            $this->isGood['message'] = 'GRT completed!';
             return response( $this->isGood, 200);
 
         } catch ( Exception $e )
@@ -840,6 +858,11 @@ class PageController extends Controller
         return Ledger::where('enroll_id', $req->client )->where('loan_id', $req->loan_id )->get();
     }
 
+    public function updateClientLedger( Request $req )
+    {
+        Ledger::whereId( $req->transaction_id )->where('enroll_id', $req->enroll_id )->update([ $req->field => $req->value ]);
+        return $this->added('Ledger updated!');
+    }
     // Filling the select inputs
     public function getOptions()
     {
@@ -871,7 +894,7 @@ class PageController extends Controller
             'applicant_name as label',
             'branch_id'
         ]);
-        $output['documents'] = Document::all();
+        $output['documents'] = Document::whereIn('id', [2,3])->get(); // Aadhaar, VoterID
 
         return response()->json($output);
 
@@ -1076,11 +1099,21 @@ class PageController extends Controller
         DB::beginTransaction();
         try {
             // DB::transaction(function($request){
+                $updates = [
+                    'phone'  => $request->phone,
+                    'aadhaar'  => $request->aadhaar,
+                    'applicant_name'  => $request->applicant_name,
+                    'father_name'  => $request->father_name,
+                    'postal_pin'  => $request->postal_pin,
+                    'date_of_birth'  => $request->date_of_birth
+                ];
                 if( $request->review )
                 {
                 //  Updating review column just for marking this as re-uploading the client-details after it was sent back
-                    Enrollment::whereId($request->enroll_id)->update(['review' => true, 'sent_back' => false ]);
+                    $updates['review'] = true;
+                    $updates['sent_back'] = false;
                 }
+                Enrollment::whereId($request->enroll_id)->update($updates);
                 $record = EnrollmentAdditional::where('enroll_id',$request->enroll_id);
                 if(!$record->exists()) {
                     try {
@@ -1281,6 +1314,7 @@ class PageController extends Controller
     {
         // return [ 'todo day-init for '.$branchID ];
         $theNextDay = strtolower(date('l',strtotime("+ 1 day")));
+        if(Collection::where('date', date('d-m-Y', strtotime('+1 day')))->where('branch_id', $branchID )->exists()) return $this->withError('Day already initialized!');
         /*
             branch k andar center hain
             centers se related client hain
@@ -1304,6 +1338,7 @@ class PageController extends Controller
             // Log::info('loan info:- ', $loan->loanProduct);
             $dueAmount += round(((float)$loan->loanProduct->amount  / $loan->loanProduct->installments ), 2);
         }
+        // return $dueAmount;
 
         Collection::create([
             'branch_id' => $branchID,
@@ -1457,7 +1492,7 @@ class PageController extends Controller
     {
         if( $id ) {
             return EnrollmentResource::collection(Enrollment::whereId($id)->with(['branch','otherInfo','documents'=>function($q){
-                $q->whereNotIn('document_id', [5,6,7])->select('enroll_id','file_name', 'data');
+                $q->whereNotIn('document_id', [5,6,7])->select('enroll_id','document_id','file_name', 'data');
             }])->get());
         }
         return DB::table('enrollments as e')->join('branches','branches.id', 'e.branch_id')
@@ -1471,7 +1506,21 @@ class PageController extends Controller
 
     public function getReviewClients() // Under `Update CIS`
     {
-        return Enrollment::where('sent_back', true )->whereHas('appraisal')->with('appraisal')->get();
+        // we need to fetch the last updated thing from  CGT|Credit Appraisal
+        $clients = Enrollment::where('sent_back', true )->with(['appraisal'=>function($query){
+            $query->select( 'enroll_id', 'remarks','updated_at');
+        },'cgt' => function($q){
+            $q->select( 'enroll_id','remarks','updated_at');
+        }])->get();
+
+        $clients->each(function($client) {
+            if(strtotime($client->appraisal->updated_at) > strtotime($client->cgt->updated_at)) {
+                $client->remarks = $client->appraisal->remarks;
+            } else {
+                $client->remarks = $client->cgt->remarks;
+            }
+        });
+        return $clients;
     }
     public function updateClientAppraisalStatus( Request $request ) {
 
@@ -1492,7 +1541,7 @@ class PageController extends Controller
             }
 
             Enrollment::whereId($request->enroll_id)->update([
-                'sent_back' => $request->status == 3,
+                'sent_back' => $request->status == 3, // further
                 'approved'  => $request->status == 1
             ]);
 
@@ -1514,7 +1563,7 @@ class PageController extends Controller
                 // ]);
                 // $this->isGood['sanction_letter'] = $document;
             }
-            return $this->added('Status updated successfully!');
+            return $this->added($request->status==1?'Appraisal completed!':'Status updated successfully!');
 
         } catch (\Throwable $e ) {
             Log::info( 'Error in updating status: '.$e->getMessage() );

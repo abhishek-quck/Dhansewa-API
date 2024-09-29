@@ -12,7 +12,7 @@ class EnrollmentAdditional extends Model
     protected $guarded=[];
     protected $table='enrollment_additionals';
 
-    protected $hidden = ['group_no','loan_request','enrolled_by'];
+    protected $hidden = ['group_no','loan_request','enrolled_by', 'created_at', 'updated_at'];
     protected function coApplicantDob():Attribute
     {
         return Attribute::make(

@@ -61,6 +61,7 @@ Route::middleware('auth:sanctum')
     Route::get('/permissions/{userID?}', 'getPermissions');
     Route::get('/report-access/{employee_id}', 'getReportAccess');
     Route::get('/summary', 'getSummary');
+    Route::get('/live-collection-status', 'getLiveCollectionStatus');
     Route::get('/get-clients-for-appraisal/{id?}', 'getClientsForAppraisal'); // for `Admin` side
     Route::get('/get-review-clients', 'getReviewClients');
     Route::post('/add-enrollment', 'addEnrollment');
@@ -91,6 +92,7 @@ Route::middleware('auth:sanctum')
     Route::post('/speed-loan-disburse', 'speedLoanDisburse');
     Route::post('/search-in-loan', 'searchInLoan');
     Route::post('/get-client-ledger', 'getClientLedger');
+    Route::put('/update-client-ledger', 'updateClientLedger');
 
     Route::get('/get-branches/{branch_id?}','getBranches');
     Route::get('/get-branch-info/{branch_id?}','getBranchInfo');
