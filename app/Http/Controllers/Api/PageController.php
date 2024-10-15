@@ -32,6 +32,7 @@ use App\Models\{Account, AccountHead,
     Employee,
     Enrollment,
     EnrollmentAdditional,
+    Funder,
     Ledger,
     LoanDisbursement,
     LoanProduct,
@@ -757,6 +758,37 @@ class PageController extends Controller
             'id','name',
             'company_id'
         ]);
+    }
+
+    public function getFunders($id=null)
+    {
+        if ($id) {
+            return Funder::where('company_id', auth()->user()->cID)->whereId($id)
+            ->first([
+                'id','name',
+                'email', 'phone', 'leadby'
+            ]);
+        }
+        return Funder::where('company_id', auth()->user()->cID)
+        ->get([
+            'id','name',
+            'email', 'phone', 'leadby'
+        ]);
+    }
+
+    public function createFunder(Request $request)
+    {
+        if(Funder::create([
+            'name' => $request->name,
+            'email' => $request->email,
+            'address' => $request->address,
+            'phone' => $request->phone,
+            'leadby' => $request->leadby,
+            'company_id' => auth()->user()->company_id,
+        ])) {
+            return ['status' => true, 'message'=> 'Funder added!'];
+        }
+        return $this->withError();
     }
 
     public function getBranchInfo($br_ID=null)  // for tabular-data
@@ -1761,11 +1793,11 @@ class PageController extends Controller
     }
 
     public function saveSanctionLetter(Request $request) {
-
+        $enrolled = Enrollment::find($request->enroll_id)->first('applicant_name');
         if($doc = ClientDocument::create([
             'enroll_id' => $request->enroll_id,
             'document_id' => Document::where('name','like','%sanction%')->first('id')->id,
-            'file_name' => date('d_m_Y').'_sanction_letter_'.$request->enroll_id.'.pdf',
+            'file_name' => date('d_m_Y').'_sanction_letter_'.$enrolled->applicant_name.'.pdf',
             'data' => 'data:application/pdf;base64,'.base64_encode($request->file->get())
         ])) {
             $this->isGood['filename'] = $doc->file_name;
