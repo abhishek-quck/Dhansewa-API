@@ -784,7 +784,7 @@ class PageController extends Controller
             'address' => $request->address,
             'phone' => $request->phone,
             'leadby' => $request->leadby,
-            'company_id' => auth()->user()->company_id,
+            'company_id' => auth()->user()->cID,
         ])) {
             return ['status' => true, 'message'=> 'Funder added!'];
         }
