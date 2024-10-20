@@ -810,7 +810,7 @@ class PageController extends Controller
             // $previousLoans->delete();
             $prev = $previousLoans->orderBy('id', 'DESC')->first('loan_id')->loan_id;
             $hasLoan = LoanDisbursement::where('loan_id', $prev );
-            if(!$hasLoan->exists())
+            if($hasLoan->exists())
             {
                 $this->badResponse['message'] = 'Client already have registered a loan id and not paid yet!';
                 return response()->json($this->badResponse );
@@ -1579,7 +1579,7 @@ class PageController extends Controller
 
             if( $request->status == 1 ) // generate loan_id as soon as credit is approved
             {
-                $data = $this->generateLoanID( encrypt($request->enroll_id) );
+                return $this->generateLoanID( encrypt($request->enroll_id) );
                 // Log::info(json_encode($data));
                 // $loanID = $data['loan']->loan_id;
                 // $fileName = date('d_m_Y').'_Sanction_Letter.pdf';
