@@ -37,6 +37,7 @@ use App\Models\{Account, AccountHead,
     LoanDisbursement,
     LoanProduct,
     Permission,
+    SanctionLetter,
     Sidebar,
     State,
     SidebarSubmenu,
@@ -810,7 +811,7 @@ class PageController extends Controller
             // $previousLoans->delete();
             $prev = $previousLoans->orderBy('id', 'DESC')->first('loan_id')->loan_id;
             $hasLoan = LoanDisbursement::where('loan_id', $prev );
-            if($hasLoan->exists())
+            if(!$hasLoan->exists())
             {
                 $this->badResponse['message'] = 'Client already have registered a loan id and not paid yet!';
                 return response()->json($this->badResponse );
@@ -1509,7 +1510,7 @@ class PageController extends Controller
         return Employee::whereId($id)->first();
     }
 
-    public function getAppraisalClients() { // Under `Enrollment` > `Credit Appraisals`
+    public function getAppraisalClients() { // Under `Enrollment` > `Credit Appraisals` not in use
 
         // return DB::table('enrollments')->join('credit_appraisals ca','ca.enroll_id','e.id')->get();
         return Enrollment::where('approved', false )->where('sent_back', false )->get();
@@ -1528,10 +1529,9 @@ class PageController extends Controller
             }])->get());
         }
         return DB::table('enrollments as e')->join('branches','branches.id', 'e.branch_id')
-        ->join('client_grt as cgt', 'cgt.enroll_id', 'e.id')
+        ->join('client_grt as grt', 'grt.enroll_id', 'e.id')
         ->whereNotIn('e.id', DB::table('credit_appraisals')->pluck('enroll_id')->toArray()) // jinka check pahle nhi hua hai
         ->where('approved', false )
-        ->orWhere('review', true ) // marks as `correction completed`
         ->get(['e.id','branches.name as branch_name','applicant_name' ]);
 
     }
@@ -1579,8 +1579,8 @@ class PageController extends Controller
 
             if( $request->status == 1 ) // generate loan_id as soon as credit is approved
             {
-                return $this->generateLoanID( encrypt($request->enroll_id) );
-                // Log::info(json_encode($data));
+                $data = $this->generateLoanID( encrypt($request->enroll_id) );
+                Log::info(json_encode($data));
                 // $loanID = $data['loan']->loan_id;
                 // $fileName = date('d_m_Y').'_Sanction_Letter.pdf';
                 // $view = view('reports.sanctionLetter', compact('loanID', 'fileName'));
@@ -1593,7 +1593,7 @@ class PageController extends Controller
                 //     'data'      => $pdf,
                 //     'file_name' => $fileName
                 // ]);
-                // $this->isGood['sanction_letter'] = $document;
+                // $this->isGood['loan'] = $data->loan;
             }
             return $this->added($request->status==1?'Appraisal completed!':'Status updated successfully!');
 
@@ -1794,16 +1794,18 @@ class PageController extends Controller
 
     public function saveSanctionLetter(Request $request) {
         $enrolled = Enrollment::find($request->enroll_id)->first('applicant_name');
-        if($doc = ClientDocument::create([
-            'enroll_id' => $request->enroll_id,
-            'document_id' => Document::where('name','like','%sanction%')->first('id')->id,
-            'file_name' => date('d_m_Y').'_sanction_letter_'.$enrolled->applicant_name.'.pdf',
-            'data' => 'data:application/pdf;base64,'.base64_encode($request->file->get())
-        ])) {
-            $this->isGood['filename'] = $doc->file_name;
-            return $this->added('File uploaded successfully!');
-        } else {
+        $doc = SanctionLetter::where('date', date('d-m-Y'))->where('loan_id', $request->loan_id);
+        if($doc->exists()) {
             return response()->json($this->badResponse, 200);
+        } else {
+            $doc = $doc->create([
+                'enroll_id' => $request->enroll_id,
+                'loan_id' => $request->loan_id,
+                'date' => date('Y-m-d'),
+                'data' => 'data:application/pdf;base64,'.base64_encode($request->file->get())
+            ]);
+            $this->isGood['filename'] = date('d_m_Y')."_$enrolled->applicant_name";
+            return $this->added('File uploaded successfully!');
         }
 
     }
