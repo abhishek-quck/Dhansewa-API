@@ -801,7 +801,7 @@ class PageController extends Controller
         return Branch::where('company_id', auth()->user()->cID )->get();
     }
 
-    public function generateLoanID($encryptedId)
+    public function generateLoanID($encryptedId, $inside=false)
     {
         $previousLoans = ClientLoan::where('enroll_id', decrypt($encryptedId))->withTrashed(); // consider deleted loans too.
 
@@ -826,7 +826,7 @@ class PageController extends Controller
             'loan_id'    =>  $loanID,
             'updated_by' =>  auth()->user()->login_id? "emp_".auth()->user()->login_id: auth()->user()->id,
         ]);
-
+        if($inside) return $loanID;
         $this->isGood['loan'] = $loan;
         return $this->added('Loan Id generated successfully');
 
@@ -1530,7 +1530,7 @@ class PageController extends Controller
         }
         return DB::table('enrollments as e')->join('branches','branches.id', 'e.branch_id')
         ->join('client_grt as grt', 'grt.enroll_id', 'e.id')
-        ->whereNotIn('e.id', DB::table('credit_appraisals')->pluck('enroll_id')->toArray()) // jinka check pahle nhi hua hai
+        ->whereNotIn('e.id', DB::table('credit_appraisals')->where('status', 1 )->pluck('enroll_id')->toArray()) // jinka check pahle nhi hua hai
         ->where('approved', false )
         ->get(['e.id','branches.name as branch_name','applicant_name' ]);
 
@@ -1579,8 +1579,8 @@ class PageController extends Controller
 
             if( $request->status == 1 ) // generate loan_id as soon as credit is approved
             {
-                $data = $this->generateLoanID( encrypt($request->enroll_id) );
-                Log::info(json_encode($data));
+                $loan_id = $this->generateLoanID( encrypt($request->enroll_id), true );
+                Log::info("Generated loan ID:- ".$loan_id);
                 // $loanID = $data['loan']->loan_id;
                 // $fileName = date('d_m_Y').'_Sanction_Letter.pdf';
                 // $view = view('reports.sanctionLetter', compact('loanID', 'fileName'));
@@ -1593,7 +1593,7 @@ class PageController extends Controller
                 //     'data'      => $pdf,
                 //     'file_name' => $fileName
                 // ]);
-                // $this->isGood['loan'] = $data->loan;
+                $this->isGood['loan_id'] = $loan_id;
             }
             return $this->added($request->status==1?'Appraisal completed!':'Status updated successfully!');
 
