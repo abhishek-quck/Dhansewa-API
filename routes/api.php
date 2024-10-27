@@ -99,7 +99,7 @@ Route::middleware('auth:sanctum')
     Route::get('/get-branch-info/{branch_id?}','getBranchInfo');
     Route::get('/preview-document/{clientID}/{id}','previewDocument');
     Route::get('/print-passbook/{clientID}','printPassbook');
-    Route::get('/download-sanction/{clientID}','downloadSanction');
+    Route::get('/download-sanction/{clientID}/{loanID}','downloadSanction');
     Route::get('/test','test');
     Route::post('/create-funder','createFunder');
     Route::post('/add-sale-products', 'addCrossSaleProducts');

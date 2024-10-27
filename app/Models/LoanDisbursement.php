@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class LoanDisbursement extends Model
@@ -31,5 +32,10 @@ class LoanDisbursement extends Model
     public function loanProduct():BelongsTo
     {
         return $this->belongsTo(LoanProduct::class, 'loan_product_id' );
-    } 
+    }
+
+    public function ledger():HasMany
+    {
+        return $this->hasMany(Ledger::class,'loan_id','loan_id');
+    }
 }

@@ -86,4 +86,10 @@ class Enrollment extends Model
     {
         return $this->hasMany(ClientLoan::class, 'enroll_id');
     }
+
+    public function sanction():HasMany
+    {
+        return $this->hasMany(SanctionLetter::class, 'enroll_id');
+    }
+
 }

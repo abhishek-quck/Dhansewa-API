@@ -840,7 +840,7 @@ class PageController extends Controller
     {
         try {
             if(LoanDisbursement::create([
-                'enroll_id'         => $req->enroll_id,
+                'enroll_id'         => $req->enroll_id?? explode(':',$req->loan_id)[0],
                 'loan_id'           => $req->loan_id,
                 'loan_date'         => $req->loan_date,
                 'loan_amount'       => $req->loan_amount,
@@ -870,6 +870,7 @@ class PageController extends Controller
             //code...
         } catch (\Throwable $th) {
             //throw $th;
+            Log::info('loan DB exception: '.$th->getMessage(), $th->getTrace());
             $this->badResponse['message']=$th->getMessage();
             return response()->json($this->badResponse,500);
         }
@@ -1079,21 +1080,9 @@ class PageController extends Controller
         $enrolled = Enrollment::whereId($request->client)->without('latestDocument')->get([
             'id','created_at','applicant_name as name','phone', DB::raw('CONCAT(village,\', \',district,\', \',state) as address')
         ]);
-        $loanInfo = [
-            [
-                'prop_id' => '0001',
-                'loan_id' => '1000',
-                'disb_date' => '21-06-2024',
-                'disb_amt' => '20000000',
-                'paid_up' => '11',
-                'current_emi' => '2500',
-                'first_meeting_date' => '23/06/2022',
-                'last_modified_date' => '09/09/2023',
-                'p_out' => '0',
-                'int_out' => '808',
-            ]
-        ];
-        return ['targetInfo'=> $enrolled, 'loanInfo'=> $loanInfo];
+        $GRT = ClientGRT::where('enroll_id', $request->client)->get(['id','enroll_id','grt_date']);
+        $loan = LoanDisbursement::where('enroll_id', $request->client)->with('ledger')->get();
+        return ['targetInfo'=> $enrolled, 'loanInfo'=> $loan , 'GRTInfo' => $GRT ];
 
     }
 
@@ -1113,11 +1102,11 @@ class PageController extends Controller
         }
     }
 
-    public function downloadSanction($clientID)
+    public function downloadSanction($clientID, $loanID)
     {
-        $doc = ClientDocument::where('enroll_id', $clientID)->where('document_id', 7)->first();
+        $doc = SanctionLetter::where('enroll_id', $clientID)->where('loan_id', $loanID )->first('data');
         if(!blank($doc)) {
-            return base64_decode($doc->data);
+            return base64_decode(str_replace('data:application/pdf;base64,','', $doc->data ));
         } else {
             throw new Exception('Sanction letter does\'t exist!');
         }
@@ -1662,10 +1651,8 @@ class PageController extends Controller
 
     public function getClientDocuments($clientID) {
 
-        return ClientDocument::where('enroll_id', $clientID )
-        ->with(['client' => function($q) {
-            $q->select('applicant_name as name','id');
-        }])->get();
+        return Enrollment::whereId($clientID )
+        ->with(['sanction','documents'])->first(['id', 'applicant_name']);
 
     }
 
